@@ -18,6 +18,7 @@ export const enum LineKind {
   Generic = 4,
   Raw = 5,
   Continuation = 6,
+  Csv = 7,
 }
 
 export interface ParsedLine {

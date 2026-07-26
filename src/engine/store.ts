@@ -15,6 +15,7 @@
  * timestamps are never altered.
  */
 
+import { splitDelimited, type CsvDialect } from "./csv";
 import { GrowableF64, GrowableU32, GrowableU8, GrowableI32 } from "./growable";
 import { Level } from "./levels";
 import {
@@ -66,6 +67,7 @@ export interface HistogramResult {
 export class LogStore {
   private blocks: Uint8Array[] = [new Uint8Array(BLOCK_SIZE)];
   private cursor = 0;
+  private usedBytes = 0;
 
   private readonly tsMs = new GrowableF64(); // NaN = none
   private readonly effTs = new GrowableF64();
@@ -81,8 +83,13 @@ export class LogStore {
 
   private readonly services: string[] = [];
   private readonly serviceIds = new Map<string, number>();
-  readonly files: { name: string; rows: number; firstTs: number | null; lastTs: number | null }[] =
-    [];
+  readonly files: {
+    name: string;
+    rows: number;
+    firstTs: number | null;
+    lastTs: number | null;
+    csv?: CsvDialect;
+  }[] = [];
 
   private messages = new Map<number, string>();
   private sorted: Uint32Array | null = null;
@@ -130,6 +137,31 @@ export class LogStore {
     }
 
     const parsed = parseLine(text, referenceYear);
+    return this.appendRow(fileId, bytes, text, parsed.kind, parsed);
+  }
+
+  /** Append a pre-parsed record (CSV path, custom formats). */
+  appendParsed(
+    fileId: number,
+    bytes: Uint8Array,
+    rawText: string,
+    kind: LineKind,
+    parsed: { ts: number | null; level: Level; service: string | null; message: string },
+  ): number {
+    const file = this.files[fileId];
+    if (!file) throw new Error(`unknown file ${fileId}`);
+    this.lineNoPerFile[fileId]!++;
+    return this.appendRow(fileId, bytes, rawText, kind, parsed);
+  }
+
+  private appendRow(
+    fileId: number,
+    bytes: Uint8Array,
+    text: string,
+    kind: LineKind,
+    parsed: { ts: number | null; level: Level; service: string | null; message: string },
+  ): number {
+    const file = this.files[fileId]!;
     const stored = this.storeBytes(bytes);
 
     let svc = NO_SERVICE;
@@ -156,7 +188,7 @@ export class LogStore {
     const id = this.tsMs.push(parsed.ts ?? NaN);
     this.effTs.push(eff);
     this.level.push(parsed.level);
-    this.kind.push(parsed.kind);
+    this.kind.push(kind);
     this.svcId.push(svc);
     this.fileId.push(fileId);
     this.blockIdx.push(stored.block);
@@ -202,6 +234,7 @@ export class LogStore {
     target[this.cursor] = 0x0a;
     target.set(bytes, this.cursor + 1);
     this.cursor += bytes.length + 1;
+    this.usedBytes += bytes.length + 1;
     this.byteLen.set(row, this.byteLen.get(row) + bytes.length + 1);
   }
 
@@ -215,6 +248,7 @@ export class LogStore {
     block.set(bytes, this.cursor);
     const offset = this.cursor;
     this.cursor += bytes.length;
+    this.usedBytes += bytes.length;
     return { block: this.blocks.length - 1, offset };
   }
 
@@ -417,6 +451,17 @@ export class LogStore {
         return logfmtFields(firstLine);
       case LineKind.Access:
         return accessFields(firstLine);
+      case LineKind.Csv: {
+        const csv = this.files[this.fileId.get(id)]?.csv;
+        if (!csv) return null;
+        const values = splitDelimited(text, csv.delimiter);
+        const out: Record<string, string> = {};
+        for (let i = 0; i < csv.header.length; i++) {
+          const v = values[i];
+          if (v !== undefined && v !== "") out[csv.header[i]!] = v;
+        }
+        return out;
+      }
       default:
         return null;
     }
@@ -436,7 +481,7 @@ export class LogStore {
   }
 
   approxBytes(): number {
-    return this.blocks.reduce((a, b) => a + b.length, 0);
+    return this.usedBytes;
   }
 
   /** Facet counts over ALL rows — cheap column scans, no materialization. */

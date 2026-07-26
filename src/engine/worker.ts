@@ -5,7 +5,7 @@
  * facets; the UI asks only for the rows it can see.
  */
 
-import { LineSplitter } from "./lines";
+import { Ingester } from "./ingest";
 import {
   serializeHistogram,
   toFilterSpec,
@@ -26,13 +26,9 @@ const encoder = new TextEncoder();
 
 function addText(fileName: string, text: string, reqId: number): void {
   const fileId = store.addFile(fileName);
-  const splitter = new LineSplitter({
-    line: (bytes, lineText) => {
-      store.appendLine(fileId, bytes, lineText);
-    },
-  });
-  splitter.push(encoder.encode(text));
-  splitter.end();
+  const ingester = new Ingester(store, fileId);
+  ingester.push(encoder.encode(text));
+  ingester.end();
   finishFile(fileId, reqId);
 }
 
@@ -40,23 +36,19 @@ async function addFile(file: File, reqId: number): Promise<void> {
   const fileId = store.addFile(file.name);
   let bytesRead = 0;
   let lastProgress = 0;
-  const splitter = new LineSplitter({
-    line: (bytes, lineText) => {
-      store.appendLine(fileId, bytes, lineText);
-    },
-  });
+  const ingester = new Ingester(store, fileId);
   const reader = file.stream().getReader();
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    splitter.push(value);
+    ingester.push(value);
     bytesRead += value.byteLength;
     if (bytesRead - lastProgress > 16 * 1024 * 1024) {
       lastProgress = bytesRead;
       post({ type: "progress", reqId, rows: store.rowCount, bytes: bytesRead });
     }
   }
-  splitter.end();
+  ingester.end();
   finishFile(fileId, reqId);
 }
 
