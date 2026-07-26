@@ -54,7 +54,11 @@ export interface FilterSpec {
 export interface HistogramResult {
   bucketMs: number;
   startMs: number;
+  /** Every row in the store — the stable context. */
   total: Uint32Array;
+  /** Rows matching the current filters. */
+  matched: Uint32Array;
+  /** Errors / warns within the matched set. */
   errors: Uint32Array;
   warns: Uint32Array;
 }
@@ -314,15 +318,19 @@ export class LogStore {
     return out.view().slice();
   }
 
-  /** Histogram over the given row ids (already filtered), adaptive bucket size. */
-  histogram(ids: Uint32Array, targetBuckets = 120): HistogramResult | null {
+  /**
+   * Histogram whose buckets always span the WHOLE store (stable context),
+   * with the filtered rows overlaid. Filtering never rescales the timeline.
+   */
+  histogram(matchedIds: Uint32Array, targetBuckets = 120): HistogramResult | null {
+    const eff = this.effTs.view();
     let min = Infinity;
     let max = -Infinity;
-    for (let i = 0; i < ids.length; i++) {
-      const eff = this.effTs.get(ids[i]!);
-      if (!Number.isNaN(eff)) {
-        if (eff < min) min = eff;
-        if (eff > max) max = eff;
+    for (let i = 0; i < eff.length; i++) {
+      const t = eff[i]!;
+      if (!Number.isNaN(t)) {
+        if (t < min) min = t;
+        if (t > max) max = t;
       }
     }
     if (!Number.isFinite(min) || !Number.isFinite(max)) return null;
@@ -341,19 +349,25 @@ export class LogStore {
     const startMs = Math.floor(min / bucketMs) * bucketMs;
     const buckets = Math.max(1, Math.ceil((max - startMs + 1) / bucketMs));
     const total = new Uint32Array(buckets);
+    const matched = new Uint32Array(buckets);
     const errors = new Uint32Array(buckets);
     const warns = new Uint32Array(buckets);
-    for (let i = 0; i < ids.length; i++) {
-      const id = ids[i]!;
-      const eff = this.effTs.get(id);
-      if (Number.isNaN(eff)) continue;
-      const b = Math.min(buckets - 1, Math.floor((eff - startMs) / bucketMs));
-      total[b]!++;
+    for (let i = 0; i < eff.length; i++) {
+      const t = eff[i]!;
+      if (Number.isNaN(t)) continue;
+      total[Math.min(buckets - 1, Math.floor((t - startMs) / bucketMs))]!++;
+    }
+    for (let i = 0; i < matchedIds.length; i++) {
+      const id = matchedIds[i]!;
+      const t = this.effTs.get(id);
+      if (Number.isNaN(t)) continue;
+      const b = Math.min(buckets - 1, Math.floor((t - startMs) / bucketMs));
+      matched[b]!++;
       const lv = this.level.get(id);
       if (lv === Level.Error) errors[b]!++;
       else if (lv === Level.Warn) warns[b]!++;
     }
-    return { bucketMs, startMs, total, errors, warns };
+    return { bucketMs, startMs, total, matched, errors, warns };
   }
 
   /** Materialize rows for display. */

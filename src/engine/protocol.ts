@@ -29,6 +29,7 @@ export interface SerializedHistogram {
   bucketMs: number;
   startMs: number;
   total: number[];
+  matched: number[];
   errors: number[];
   warns: number[];
 }
@@ -39,6 +40,7 @@ export function serializeHistogram(h: HistogramResult | null): SerializedHistogr
     bucketMs: h.bucketMs,
     startMs: h.startMs,
     total: Array.from(h.total),
+    matched: Array.from(h.matched),
     errors: Array.from(h.errors),
     warns: Array.from(h.warns),
   };

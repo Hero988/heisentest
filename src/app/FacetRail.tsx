@@ -105,7 +105,11 @@ export function FacetRail({ engine, snapshot }: Props) {
       <section className="rail-note">
         <p>
           <strong>{fmtCount(snapshot.totalRows)}</strong> lines · {fmtBytes(snapshot.approxBytes)}{" "}
-          parsed locally{engine.loadMs !== null ? ` in ${(engine.loadMs / 1000).toFixed(1)}s` : ""}.
+          parsed locally
+          {engine.loadMs !== null
+            ? ` in ${engine.loadMs < 1000 ? `${engine.loadMs} ms` : `${(engine.loadMs / 1000).toFixed(1)} s`}`
+            : ""}
+          .
         </p>
         <p className="rail-privacy">Nothing leaves this tab — it works with wifi off.</p>
       </section>

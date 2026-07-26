@@ -29,7 +29,7 @@ export function Timeline({ histogram, timeRange, onPick }: Props) {
     g.scale(dpr, dpr);
     g.clearRect(0, 0, width, height);
 
-    const { total, errors, warns, bucketMs, startMs } = histogram;
+    const { total, matched, errors, warns, bucketMs, startMs } = histogram;
     const n = total.length;
     if (n === 0) return;
     let max = 1;
@@ -45,30 +45,48 @@ export function Timeline({ histogram, timeRange, onPick }: Props) {
 
     const bw = width / n;
     const barW = Math.max(1, bw - Math.min(3, bw * 0.25));
+    const scale = (v: number) => ((axisY - 4) * v) / max;
     for (let i = 0; i < n; i++) {
       const x = i * bw + (bw - barW) / 2;
       const bucketStart = startMs + i * bucketMs;
       const inRange =
         timeRange !== null && bucketStart >= timeRange[0] && bucketStart <= timeRange[1];
-      const t = total[i]!;
+      const dim = timeRange !== null && !inRange;
+      const m = matched[i]!;
       const e = errors[i]!;
       const w = warns[i]!;
-      const th = ((axisY - 4) * t) / max;
-      const eh = ((axisY - 4) * e) / max;
-      const wh = ((axisY - 4) * w) / max;
+      const rest = Math.max(0, m - e - w);
 
-      g.globalAlpha = timeRange === null || inRange ? 0.45 : 0.15;
-      g.fillStyle = inRange ? cssVar("--thread-a") : cssVar("--muted");
-      g.fillRect(x, axisY - th, barW, th);
+      // Context: every row in the file, always visible, always same scale.
+      g.globalAlpha = dim ? 0.1 : 0.22;
+      g.fillStyle = cssVar("--muted");
+      g.fillRect(x, axisY - scale(total[i]!), barW, scale(total[i]!));
 
-      g.globalAlpha = timeRange === null || inRange ? 1 : 0.3;
-      if (wh > 0) {
-        g.fillStyle = cssVar("--level-warn");
-        g.fillRect(x, axisY - eh - wh, barW, wh);
+      // A bucket with matches must stay visible even when one row is
+      // sub-pixel at this scale — matches are what the user is hunting.
+      if (m > 0 && scale(m) < 3) {
+        g.globalAlpha = dim ? 0.3 : 1;
+        g.fillStyle =
+          e > 0 ? cssVar("--verdict-fail") : w > 0 ? cssVar("--level-warn") : cssVar("--thread-a");
+        g.fillRect(x, axisY - 3, barW, 3);
+        continue;
       }
-      if (eh > 0) {
+
+      // Matched rows stacked on top: plain, warns, errors.
+      g.globalAlpha = dim ? 0.25 : 1;
+      if (rest > 0) {
+        g.fillStyle = inRange ? cssVar("--thread-a") : cssVar("--ink-soft");
+        g.globalAlpha = dim ? 0.2 : inRange ? 0.9 : 0.5;
+        g.fillRect(x, axisY - scale(e + w + rest), barW, scale(rest));
+        g.globalAlpha = dim ? 0.25 : 1;
+      }
+      if (w > 0) {
+        g.fillStyle = cssVar("--level-warn");
+        g.fillRect(x, axisY - scale(e + w), barW, scale(w));
+      }
+      if (e > 0) {
         g.fillStyle = cssVar("--verdict-fail");
-        g.fillRect(x, axisY - eh, barW, eh);
+        g.fillRect(x, axisY - scale(e), barW, scale(e));
       }
     }
     g.globalAlpha = 1;

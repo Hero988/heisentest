@@ -163,10 +163,27 @@ describe("LogStore histogram", () => {
     const h = store.histogram(ids)!;
     expect(h).not.toBeNull();
     expect(h.bucketMs).toBe(5000); // ~170s span at ≤120 buckets → 5s buckets
-    const sum = h.total.reduce((a, b) => a + b, 0);
-    expect(sum).toBe(4);
+    expect(h.total.reduce((a, b) => a + b, 0)).toBe(4);
+    expect(h.matched.reduce((a, b) => a + b, 0)).toBe(4);
     expect(h.errors.reduce((a, b) => a + b, 0)).toBe(1);
     expect(h.warns.reduce((a, b) => a + b, 0)).toBe(1);
+  });
+
+  it("keeps full-file buckets when the filter matches a single row", () => {
+    const store = new LogStore();
+    const f = store.addFile("app.log");
+    feed(store, f, [
+      "2026-07-26T02:00:01Z INFO a",
+      "2026-07-26T02:01:00Z ERROR needle",
+      "2026-07-26T02:02:50Z INFO d",
+    ]);
+    const matched = store.filter({ query: "needle" });
+    expect(matched.length).toBe(1);
+    const h = store.histogram(matched)!;
+    // Context spans the whole file, not just the matched second.
+    expect(h.total.reduce((a, b) => a + b, 0)).toBe(3);
+    expect(h.matched.reduce((a, b) => a + b, 0)).toBe(1);
+    expect(h.total.length).toBeGreaterThan(10);
   });
 
   it("returns null when no row has a timestamp", () => {
