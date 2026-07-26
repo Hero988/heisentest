@@ -4,10 +4,12 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { EngineClient, type DetailResult, type LoadProgress } from "../engine/client";
+import { EngineClient, type DetailResult, type FileInfo, type LoadProgress } from "../engine/client";
+import type { FormatSpec } from "../engine/custom";
 import type { Level } from "../engine/levels";
 import type { FileSummary, QuerySnapshot, SerializableFilter } from "../engine/protocol";
 import type { RowView } from "../engine/store";
+import { knownFormats } from "./formatStore";
 
 export interface Filters {
   query: string;
@@ -106,6 +108,7 @@ export function useEngine() {
         for (const file of dropped) {
           await client.addFile(
             file,
+            knownFormats(),
             (p) => setProgress(p),
             (f) => setFiles((prev) => [...prev.filter((p) => p.id !== f.id), f]),
           );
@@ -144,6 +147,19 @@ export function useEngine() {
 
   const detail = useCallback((rowId: number): Promise<DetailResult> => client.detail(rowId), [client]);
 
+  const fileInfo = useCallback((fileId: number): Promise<FileInfo> => client.fileInfo(fileId), [client]);
+
+  /** Apply (or clear) a custom format on a file and re-parse everything. */
+  const reparse = useCallback(
+    async (fileId: number, spec: FormatSpec | null) => {
+      await client.reparseFile(fileId, spec);
+      rowCache.current.clear();
+      inFlight.current.clear();
+      await runQuery(filters);
+    },
+    [client, filters, runQuery],
+  );
+
   const positionForTime = useCallback(
     (ms: number): Promise<number> => client.positionForTime(ms),
     [client],
@@ -175,6 +191,8 @@ export function useEngine() {
     addFiles,
     rowAt,
     detail,
+    fileInfo,
+    reparse,
     positionForTime,
     reset,
   };

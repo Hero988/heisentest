@@ -89,6 +89,8 @@ export class LogStore {
     firstTs: number | null;
     lastTs: number | null;
     csv?: CsvDialect;
+    /** Field extractor for rows ingested under a custom pattern format. */
+    customFields?: (line: string) => Record<string, string>;
   }[] = [];
 
   private messages = new Map<number, string>();
@@ -124,20 +126,24 @@ export class LogStore {
     if (!file) throw new Error(`unknown file ${fileId}`);
     this.lineNoPerFile[fileId]!++;
 
-    const lastRow = this.lastRowPerFile[fileId]!;
-    if (lastRow >= 0 && isContinuation(text)) {
-      // Fold into the previous row of the SAME file when it is the latest row
-      // overall in our append order for that file and stays under the cap.
-      const currentLen = this.byteLen.get(lastRow);
-      if (currentLen + bytes.length + 1 <= MAX_FOLD_BYTES && this.canExtend(lastRow)) {
-        this.extendRow(lastRow, bytes);
-        this.folded.set(lastRow, this.folded.get(lastRow) + 1);
-        return -1;
-      }
-    }
+    if (isContinuation(text) && this.tryFold(fileId, bytes)) return -1;
 
     const parsed = parseLine(text, referenceYear);
     return this.appendRow(fileId, bytes, text, parsed.kind, parsed);
+  }
+
+  /**
+   * Fold `bytes` into the file's previous row (stack traces, custom-format
+   * unmatched lines). Returns false when folding isn't possible.
+   */
+  tryFold(fileId: number, bytes: Uint8Array): boolean {
+    const lastRow = this.lastRowPerFile[fileId]!;
+    if (lastRow < 0) return false;
+    const currentLen = this.byteLen.get(lastRow);
+    if (currentLen + bytes.length + 1 > MAX_FOLD_BYTES || !this.canExtend(lastRow)) return false;
+    this.extendRow(lastRow, bytes);
+    this.folded.set(lastRow, this.folded.get(lastRow) + 1);
+    return true;
   }
 
   /** Append a pre-parsed record (CSV path, custom formats). */
@@ -462,9 +468,29 @@ export class LogStore {
         }
         return out;
       }
+      case LineKind.Custom: {
+        const extract = this.files[this.fileId.get(id)]?.customFields;
+        return extract ? extract(firstLine) : null;
+      }
       default:
         return null;
     }
+  }
+
+  /**
+   * Reconstruct a file's full text from stored bytes (folded rows keep their
+   * newlines; a CSV header line is restored). Powers re-parsing under a
+   * user-supplied format without keeping a second copy of the file.
+   */
+  extractFileText(fileId: number): string {
+    const parts: string[] = [];
+    const csv = this.files[fileId]?.csv;
+    if (csv) parts.push(csv.headerLine);
+    const fid = this.fileId.view();
+    for (let id = 0; id < this.rowCount; id++) {
+      if (fid[id] === fileId) parts.push(this.fullText(id));
+    }
+    return parts.join("\n") + "\n";
   }
 
   /** Position (in display order) of the first row at/after the given time. */

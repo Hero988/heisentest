@@ -1,5 +1,6 @@
 /** Messages between the UI and the engine worker. */
 
+import type { FormatSpec } from "./custom";
 import type { Level } from "./levels";
 import type { FilterSpec, HistogramResult, RowView } from "./store";
 
@@ -9,6 +10,15 @@ export interface FileSummary {
   rows: number;
   firstTs: number | null;
   lastTs: number | null;
+  /** Shape signature used to persist/auto-apply custom formats. */
+  signature: string | null;
+  /** Header names when the file was ingested as delimited data. */
+  csvHeader: string[] | null;
+}
+
+export interface KnownFormat {
+  signature: string;
+  spec: FormatSpec;
 }
 
 export interface FacetCounts {
@@ -48,8 +58,10 @@ export function serializeHistogram(h: HistogramResult | null): SerializedHistogr
 
 export type WorkerRequest =
   | { type: "load-sample"; reqId: number }
-  | { type: "add-file"; reqId: number; name: string; file: File }
-  | { type: "add-text"; reqId: number; name: string; text: string }
+  | { type: "add-file"; reqId: number; name: string; file: File; known?: KnownFormat[] }
+  | { type: "add-text"; reqId: number; name: string; text: string; known?: KnownFormat[] }
+  | { type: "reparse-file"; reqId: number; fileId: number; spec: FormatSpec | null }
+  | { type: "file-info"; reqId: number; fileId: number }
   | { type: "query"; reqId: number; spec: SerializableFilter }
   | { type: "rows"; reqId: number; start: number; end: number }
   | { type: "detail"; reqId: number; rowId: number }
@@ -85,6 +97,14 @@ export type WorkerResponse =
       rowId: number;
       fullText: string;
       fields: Record<string, unknown> | null;
+    }
+  | {
+      type: "file-info";
+      reqId: number;
+      fileId: number;
+      signature: string | null;
+      csvHeader: string[] | null;
+      headLines: string[];
     }
   | { type: "position"; reqId: number; position: number }
   | { type: "done"; reqId: number }

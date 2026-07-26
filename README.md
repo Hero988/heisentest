@@ -41,11 +41,30 @@ prints still parse.
 - **logfmt** — Heroku, go-kit style `key=value` lines
 - **nginx / Apache access logs** — combined log format; 5xx→ERROR, 4xx→WARN
 - **syslog** — classic `Jul 26 02:14:04 host proc[pid]:` lines
+- **CSV / TSV exports** — the files platforms hand you (Vercel, CloudWatch, Cloudflare and
+  friends): dialect sniffed, quoted fields handled (including embedded commas and newlines),
+  columns auto-classified — millisecond epochs beat second strings for the timestamp, HTTP
+  status derives the level when the level column is empty, and every column shows by name in
+  the detail view
 - **Generic framework layouts** — `timestamp LEVEL logger - message` shapes from Java, Python,
   .NET, Go, Rails and friends
 - **Stack traces** — `at …`, `Caused by:`, tracebacks and goroutine dumps fold into their
   opening error row
 - **Anything else** — still loads as searchable text; unrecognized lines are never dropped
+
+### And formats that don't exist yet
+
+Click **⚙ Adjust parsing** on any file to teach heisentest a format it has never seen:
+
+- **Pattern mode** — a regex with named groups (`(?<timestamp>…)`, `(?<level>…)`,
+  `(?<service>…)`, `(?<message>…)`; any other name becomes a field), strptime timestamp
+  formats (`%d.%m.%Y %H:%M:%S` — the same convention lnav, Fluentd and Vector use), and your
+  own severity words mapped onto error/warn/info/debug/trace. A live preview shows exactly
+  which sample lines match before you apply.
+- **Columns mode** — for delimited files, override any column role the automatic inference
+  guessed wrong.
+- Taught formats are saved locally and **re-apply automatically** the next time a file with
+  the same shape is dropped.
 
 Levels are normalized across ecosystems (`SEVERE`, `emerg`, `panic`, pino's `50` → ERROR).
 Timestamps are normalized to one clock for the timeline and cross-file merge.
@@ -72,7 +91,8 @@ detection, timestamp parsing, the columnar store — each with unit tests in `te
 ## Roadmap
 
 - Live tail of a growing local file
-- Custom timestamp/format patterns ("my format looks like this")
+- Import lnav format files and Grok patterns as custom formats
+- Group similar messages into templates (Drain-style)
 - SQL over logs (DuckDB-WASM, lazy-loaded)
 - Shareable investigations for teams — saved views, annotations, links (this will be the
   paid tier, planned at £79/month per team; the analyzer itself stays free forever)

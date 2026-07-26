@@ -5,10 +5,12 @@
  * facets; the UI asks only for the rows it can see.
  */
 
+import type { FormatSpec } from "./custom";
 import { Ingester } from "./ingest";
 import {
   serializeHistogram,
   toFilterSpec,
+  type KnownFormat,
   type WorkerRequest,
   type WorkerResponse,
 } from "./protocol";
@@ -17,6 +19,9 @@ import { LogStore } from "./store";
 
 let store = new LogStore();
 let filtered: Uint32Array = new Uint32Array(0);
+/** Format spec in force per fileId (explicit or auto-applied). */
+const fileSpecs = new Map<number, FormatSpec>();
+const fileSignatures = new Map<number, string | null>();
 
 function post(msg: WorkerResponse): void {
   (self as unknown as DedicatedWorkerGlobalScope).postMessage(msg);
@@ -24,19 +29,29 @@ function post(msg: WorkerResponse): void {
 
 const encoder = new TextEncoder();
 
-function addText(fileName: string, text: string, reqId: number): void {
+function makeIngester(fileId: number, known: KnownFormat[] | undefined): Ingester {
+  const explicit = fileSpecs.get(fileId) ?? null;
+  return new Ingester(store, fileId, explicit, (signature) => {
+    const hit = known?.find((k) => k.signature === signature);
+    if (hit) fileSpecs.set(fileId, hit.spec);
+    return hit?.spec ?? null;
+  });
+}
+
+function addText(fileName: string, text: string, reqId: number, known?: KnownFormat[]): void {
   const fileId = store.addFile(fileName);
-  const ingester = new Ingester(store, fileId);
+  const ingester = makeIngester(fileId, known);
   ingester.push(encoder.encode(text));
   ingester.end();
+  fileSignatures.set(fileId, ingester.signature());
   finishFile(fileId, reqId);
 }
 
-async function addFile(file: File, reqId: number): Promise<void> {
+async function addFile(file: File, reqId: number, known?: KnownFormat[]): Promise<void> {
   const fileId = store.addFile(file.name);
   let bytesRead = 0;
   let lastProgress = 0;
-  const ingester = new Ingester(store, fileId);
+  const ingester = makeIngester(fileId, known);
   const reader = file.stream().getReader();
   for (;;) {
     const { done, value } = await reader.read();
@@ -49,6 +64,7 @@ async function addFile(file: File, reqId: number): Promise<void> {
     }
   }
   ingester.end();
+  fileSignatures.set(fileId, ingester.signature());
   finishFile(fileId, reqId);
 }
 
@@ -57,8 +73,30 @@ function finishFile(fileId: number, reqId: number): void {
   post({
     type: "loaded",
     reqId,
-    file: { id: fileId, name: f.name, rows: f.rows, firstTs: f.firstTs, lastTs: f.lastTs },
+    file: {
+      id: fileId,
+      name: f.name,
+      rows: f.rows,
+      firstTs: f.firstTs,
+      lastTs: f.lastTs,
+      signature: fileSignatures.get(fileId) ?? null,
+      csvHeader: f.csv?.header ?? null,
+    },
   });
+}
+
+/** Re-ingest every file from stored bytes, applying the current specs. */
+function rebuildStore(): void {
+  const texts = store.files.map((f, id) => ({ name: f.name, text: store.extractFileText(id) }));
+  store = new LogStore();
+  filtered = new Uint32Array(0);
+  for (const { name, text } of texts) {
+    const fileId = store.addFile(name);
+    const ingester = new Ingester(store, fileId, fileSpecs.get(fileId) ?? null, () => null);
+    ingester.push(encoder.encode(text));
+    ingester.end();
+    fileSignatures.set(fileId, ingester.signature());
+  }
 }
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
@@ -73,15 +111,43 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         break;
       }
       case "add-file":
-        await addFile(msg.file, msg.reqId);
+        await addFile(msg.file, msg.reqId, msg.known);
         post({ type: "done", reqId: msg.reqId });
         break;
       case "add-text":
-        addText(msg.name, msg.text, msg.reqId);
+        addText(msg.name, msg.text, msg.reqId, msg.known);
         post({ type: "done", reqId: msg.reqId });
         break;
+      case "reparse-file":
+        if (msg.spec === null) fileSpecs.delete(msg.fileId);
+        else fileSpecs.set(msg.fileId, msg.spec);
+        rebuildStore();
+        post({ type: "done", reqId: msg.reqId });
+        break;
+      case "file-info": {
+        const lines: string[] = [];
+        const fid = msg.fileId;
+        const csv = store.files[fid]?.csv;
+        for (let id = 0; id < store.rowCount && lines.length < 12; id++) {
+          const rows = store.getRows([id]);
+          if (rows[0]!.fileId === fid) {
+            const full = store.fullText(id);
+            lines.push(full.includes("\n") ? full.slice(0, full.indexOf("\n")) : full);
+          }
+        }
+        post({
+          type: "file-info",
+          reqId: msg.reqId,
+          fileId: fid,
+          signature: fileSignatures.get(fid) ?? null,
+          csvHeader: csv?.header ?? null,
+          headLines: csv ? [csv.headerLine, ...lines] : lines,
+        });
+        break;
+      }
       case "query": {
         filtered = store.filter(toFilterSpec(msg.spec));
+        const counts = store.facetCounts();
         post({
           type: "snapshot",
           reqId: msg.reqId,
@@ -90,7 +156,15 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
             totalRows: store.rowCount,
             approxBytes: store.approxBytes(),
             histogram: serializeHistogram(store.histogram(filtered)),
-            facets: store.facetCounts(),
+            facets: {
+              levels: counts.levels,
+              services: counts.services,
+              files: counts.files.map((f) => ({
+                ...f,
+                signature: fileSignatures.get(f.id) ?? null,
+                csvHeader: store.files[f.id]?.csv?.header ?? null,
+              })),
+            },
           },
         });
         break;

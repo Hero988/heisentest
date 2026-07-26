@@ -205,40 +205,46 @@ export class CsvRecordReader {
 
 /* ---------------- column role inference ---------------- */
 
-const TIME_HEADERS = [
-  "timestampinms",
-  "timestampms",
-  "timestamp_ms",
-  "@timestamp",
-  "timestamp",
-  "timeutc",
-  "time_utc",
-  "eventtime",
-  "event_time",
-  "_time",
-  "time",
-  "datetime",
-  "date",
-  "created",
-  "createdat",
-  "created_at",
-  "ingesttime",
-  "receivedat",
+/*
+ * Header lexicons, informed by the documented schemas of Vercel, CloudWatch,
+ * ALB, Cloudflare Logpush, GCP, Datadog, Axiom, Railway, Render, Heroku,
+ * Netlify and Supabase. Matching runs on normalized names AND on split
+ * tokens (camelCase / snake / dot), so `EdgeResponseStatus`,
+ * `severity_text` and `timestampInMs` all resolve without exact entries.
+ */
+const LEVEL_HEADERS = [
+  "level",
+  "severity",
+  "severitytext",
+  "loglevel",
+  "levelname",
+  "priority",
 ];
-const LEVEL_HEADERS = ["level", "severity", "loglevel", "log_level", "levelname", "priority", "status_text"];
 const STATUS_HEADERS = [
   "responsestatuscode",
-  "response_status_code",
   "statuscode",
-  "status_code",
   "httpstatus",
-  "http_status",
   "responsestatus",
   "status",
   "edgeresponsestatus",
   "originresponsestatus",
+  "elbstatuscode",
+  "targetstatuscode",
 ];
-const MESSAGE_HEADERS = ["message", "msg", "text", "body", "log", "content", "event", "description", "rawlog", "line"];
+const MESSAGE_HEADERS = [
+  "message",
+  "msg",
+  "eventmessage",
+  "textpayload",
+  "text",
+  "body",
+  "log",
+  "content",
+  "event",
+  "description",
+  "rawlog",
+  "line",
+];
 const SERVICE_HEADERS = [
   "service",
   "servicename",
@@ -252,30 +258,42 @@ const SERVICE_HEADERS = [
   "component",
   "container",
   "containername",
+  "workerscriptname",
+  "dyno",
   "type",
   "logstream",
-  "log_stream",
 ];
 // Columns worth composing into a synthetic message for request-style exports.
 const COMPOSE_HEADERS = [
   "requestmethod",
-  "request_method",
+  "clientrequestmethod",
   "method",
   "requestpath",
-  "request_path",
+  "clientrequestpath",
   "path",
-  "url",
   "clientrequesturi",
   "requesturi",
+  "url",
   "durationms",
-  "duration_ms",
   "duration",
   "latency",
   "region",
 ];
+// Timestamp-ish names describing ingest/system time, not event time.
+const TIME_DEPRIORITIZE = ["ingest", "receive", "received", "observed", "end", "sys", "insert"];
 
 function norm(h: string): string {
-  return h.toLowerCase().replace(/[^a-z0-9@_]/g, "");
+  return h.toLowerCase().replace(/[^a-z0-9@]/g, "");
+}
+
+/** Split a header into lowercase tokens on case, digit and separator edges. */
+export function headerTokens(h: string): string[] {
+  return h
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Za-z])(\d)/g, "$1 $2")
+    .split(/[^A-Za-z0-9@]+| /)
+    .filter(Boolean)
+    .map((t) => t.toLowerCase());
 }
 
 function findHeader(header: string[], candidates: string[]): number {
@@ -287,48 +305,79 @@ function findHeader(header: string[], candidates: string[]): number {
   return NONE;
 }
 
+/** First column whose name tokens intersect `wanted` (e.g. severity_text → severity). */
+function findByToken(header: string[], wanted: string[]): number {
+  const tokens = header.map(headerTokens);
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i]!.some((t) => wanted.includes(t))) return i;
+  }
+  return NONE;
+}
+
 /**
  * Decide what each column means, using header names first and value probing
  * as the tiebreaker/validator over the provided sample records.
  */
 export function inferColumnRoles(header: string[], samples: string[][]): ColumnRoles {
-  const normalized = header.map(norm);
+  const allTokens = header.map(headerTokens);
+  const nonEmpty = (i: number): string[] =>
+    samples.map((r) => r[i] ?? "").filter((v) => v !== "");
 
-  // Timestamp: collect every header-name candidate, validate against values,
-  // prefer the highest resolution (millisecond epochs beat second strings).
+  // Timestamp: any column whose tokens say time/timestamp/date/ts, validated
+  // against values. Event time beats ingest/system time; millisecond epochs
+  // beat second-resolution strings.
   let time = NONE;
-  let bestResolution = -1;
+  let bestScore = -1;
   for (let i = 0; i < header.length; i++) {
-    const name = normalized[i]!;
-    const isCandidate = TIME_HEADERS.includes(name) || name.includes("time") || name.includes("date");
-    if (!isCandidate) continue;
-    const values = samples.map((r) => r[i] ?? "").filter((v) => v !== "");
+    const tokens = allTokens[i]!;
+    if (!tokens.some((t) => ["time", "timestamp", "date", "ts", "datetime"].includes(t))) continue;
+    const values = nonEmpty(i);
     if (values.length === 0) continue;
-    const parsed = values.map((v) => parseFieldTimestamp(v));
-    const good = parsed.filter((p) => p !== null).length;
+    const good = values.filter((v) => parseFieldTimestamp(v) !== null).length;
     if (good < Math.max(1, Math.ceil(values.length * 0.8))) continue;
-    // Resolution: millisecond-precision numeric epochs win over second strings.
     const resolution = values.every((v) => /^\d{13}$/.test(v.trim()))
       ? 2
       : values.some((v) => /[.,]\d{3}/.test(v))
         ? 1
         : 0;
-    if (resolution > bestResolution) {
-      bestResolution = resolution;
+    const ingestish = tokens.some((t) => TIME_DEPRIORITIZE.includes(t)) ? 0 : 4;
+    const score = ingestish + resolution;
+    if (score > bestScore) {
+      bestScore = score;
       time = i;
     }
   }
 
-  // Level: must actually contain recognizable level words in the samples
-  // (Vercel exports have a `level` column that is usually empty).
+  // Level: name says level/severity AND samples contain recognizable words —
+  // except an all-empty column keeps the role (Vercel's `level` fills in
+  // only for function log rows).
   let level = findHeader(header, LEVEL_HEADERS);
+  if (level === NONE) level = findByToken(header, ["level", "severity"]);
   if (level !== NONE) {
-    const values = samples.map((r) => r[level] ?? "").filter((v) => v !== "");
+    const values = nonEmpty(level);
     const recognized = values.filter((v) => levelFromText(v) !== Level.Unknown).length;
     if (values.length > 0 && recognized === 0) level = NONE;
   }
 
-  const status = findHeader(header, STATUS_HEADERS);
+  // HTTP status: name says status AND the values are actually 100–599.
+  // (Datadog calls its SEVERITY column "status" — value shape must win.)
+  let status = findHeader(header, STATUS_HEADERS);
+  if (status === NONE) status = findByToken(header, ["status"]);
+  if (status !== NONE) {
+    const values = nonEmpty(status);
+    if (values.length > 0) {
+      const numericHttp = values.filter((v) => {
+        const n = Number(v);
+        return Number.isInteger(n) && n >= 100 && n < 600;
+      }).length;
+      if (numericHttp < Math.ceil(values.length * 0.6)) {
+        // Not HTTP statuses. If they're severity words, adopt as level.
+        const severityish = values.filter((v) => levelFromText(v) !== Level.Unknown).length;
+        if (level === NONE && severityish >= Math.ceil(values.length * 0.6)) level = status;
+        status = NONE;
+      }
+    }
+  }
 
   // Keep the message column even if sample values are empty — later rows may
   // fill it (Vercel: request rows have no message, function logs do). The
@@ -337,6 +386,7 @@ export function inferColumnRoles(header: string[], samples: string[][]): ColumnR
 
   const service = findHeader(header, SERVICE_HEADERS);
 
+  const normalized = header.map(norm);
   const compose: number[] = [];
   for (const want of COMPOSE_HEADERS) {
     const at = normalized.indexOf(want);
@@ -356,11 +406,18 @@ export interface CsvParsed {
   message: string;
 }
 
-export function parseCsvRecord(fields: string[], roles: ColumnRoles): CsvParsed {
+export function parseCsvRecord(
+  fields: string[],
+  roles: ColumnRoles,
+  timeFormat?: { parse(value: string): number | null } | null,
+): CsvParsed {
   let ts: number | null = null;
   if (roles.time !== NONE) {
     const v = fields[roles.time];
-    if (v !== undefined && v !== "") ts = parseFieldTimestamp(v);
+    if (v !== undefined && v !== "") {
+      ts = timeFormat ? timeFormat.parse(v) : parseFieldTimestamp(v);
+      if (ts === null && !timeFormat) ts = parseFieldTimestamp(v);
+    }
   }
   if (ts === null) {
     // Fall back to scanning the whole record for anything timestamp-shaped.

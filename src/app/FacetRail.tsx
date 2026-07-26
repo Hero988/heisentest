@@ -7,6 +7,7 @@ import type { Engine, Filters } from "./useEngine";
 interface Props {
   engine: Engine;
   snapshot: QuerySnapshot;
+  onAdjust: (fileId: number, fileName: string) => void;
 }
 
 function toggle<T>(set: ReadonlySet<T>, value: T): Set<T> {
@@ -16,7 +17,7 @@ function toggle<T>(set: ReadonlySet<T>, value: T): Set<T> {
   return next;
 }
 
-export function FacetRail({ engine, snapshot }: Props) {
+export function FacetRail({ engine, snapshot, onAdjust }: Props) {
   const fileInput = useRef<HTMLInputElement>(null);
   const { filters, setFilters } = engine;
 
@@ -28,18 +29,28 @@ export function FacetRail({ engine, snapshot }: Props) {
         <h3>Files</h3>
         <div className="chips">
           {snapshot.facets.files.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              className={`chip thread-chip thread-${f.id % 6}`}
-              aria-pressed={filters.fileIds.has(f.id)}
-              onClick={() => setPartial({ fileIds: toggle(filters.fileIds, f.id) })}
-              title={f.name}
-            >
-              <span className="chip-dot" aria-hidden="true" />
-              <span className="chip-label">{f.name}</span>
-              <span className="chip-count">{fmtCount(f.rows)}</span>
-            </button>
+            <div key={f.id} className="filerow">
+              <button
+                type="button"
+                className={`chip thread-chip thread-${f.id % 6}`}
+                aria-pressed={filters.fileIds.has(f.id)}
+                onClick={() => setPartial({ fileIds: toggle(filters.fileIds, f.id) })}
+                title={f.name}
+              >
+                <span className="chip-dot" aria-hidden="true" />
+                <span className="chip-label">{f.name}</span>
+                <span className="chip-count">{fmtCount(f.rows)}</span>
+              </button>
+              <button
+                type="button"
+                className="filerow-fmt"
+                title={`Adjust parsing for ${f.name}`}
+                aria-label={`Adjust parsing for ${f.name}`}
+                onClick={() => onAdjust(f.id, f.name)}
+              >
+                ⚙
+              </button>
+            </div>
           ))}
         </div>
         <button type="button" className="rail-add" onClick={() => fileInput.current?.click()}>

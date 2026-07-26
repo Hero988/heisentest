@@ -1,13 +1,22 @@
 /** Promise-based client for the engine worker. */
 
+import type { FormatSpec } from "./custom";
 import type {
   FileSummary,
+  KnownFormat,
   QuerySnapshot,
   SerializableFilter,
   WorkerRequest,
   WorkerResponse,
 } from "./protocol";
 import type { RowView } from "./store";
+
+export interface FileInfo {
+  fileId: number;
+  signature: string | null;
+  csvHeader: string[] | null;
+  headLines: string[];
+}
 
 export interface LoadProgress {
   rows: number;
@@ -56,6 +65,14 @@ export class EngineClient {
       case "detail":
         this.settle(msg.reqId, { rowId: msg.rowId, fullText: msg.fullText, fields: msg.fields });
         break;
+      case "file-info":
+        this.settle(msg.reqId, {
+          fileId: msg.fileId,
+          signature: msg.signature,
+          csvHeader: msg.csvHeader,
+          headLines: msg.headLines,
+        });
+        break;
       case "position":
         this.settle(msg.reqId, msg.position);
         break;
@@ -98,17 +115,26 @@ export class EngineClient {
 
   addFile(
     file: File,
+    known?: KnownFormat[],
     onProgress?: (p: LoadProgress) => void,
     onFile?: (f: FileSummary) => void,
   ): Promise<void> {
-    return this.send((reqId) => ({ type: "add-file", reqId, name: file.name, file }), {
-      onProgress,
-      onFile,
-    });
+    return this.send(
+      (reqId) => ({ type: "add-file", reqId, name: file.name, file, known: known ?? [] }),
+      { onProgress, onFile },
+    );
   }
 
-  addText(name: string, text: string): Promise<void> {
-    return this.send((reqId) => ({ type: "add-text", reqId, name, text }));
+  addText(name: string, text: string, known?: KnownFormat[]): Promise<void> {
+    return this.send((reqId) => ({ type: "add-text", reqId, name, text, known: known ?? [] }));
+  }
+
+  reparseFile(fileId: number, spec: FormatSpec | null): Promise<void> {
+    return this.send((reqId) => ({ type: "reparse-file", reqId, fileId, spec }));
+  }
+
+  fileInfo(fileId: number): Promise<FileInfo> {
+    return this.send((reqId) => ({ type: "file-info", reqId, fileId }));
   }
 
   query(spec: SerializableFilter): Promise<QuerySnapshot> {

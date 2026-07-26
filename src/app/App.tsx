@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { RowView } from "../engine/store";
 import { DetailDrawer } from "./DetailDrawer";
 import { FacetRail } from "./FacetRail";
+import { FormatDialog } from "./FormatDialog";
 import { fmtBytes, fmtCount } from "./format";
 import { Hero } from "./Hero";
 import { LogTable } from "./LogTable";
@@ -14,6 +15,7 @@ export function App() {
   const [dragging, setDragging] = useState(false);
   const [selected, setSelected] = useState<{ position: number; row: RowView } | null>(null);
   const [scrollTo, setScrollTo] = useState<number | null>(null);
+  const [adjusting, setAdjusting] = useState<{ fileId: number; fileName: string } | null>(null);
 
   // Whole-window drag and drop, in every phase.
   useEffect(() => {
@@ -90,7 +92,11 @@ export function App() {
       <TopBar engine={engine} />
       {snapshot !== null && (
         <div className="workbench-body">
-          <FacetRail engine={engine} snapshot={snapshot} />
+          <FacetRail
+            engine={engine}
+            snapshot={snapshot}
+            onAdjust={(fileId, fileName) => setAdjusting({ fileId, fileName })}
+          />
           <main className="workbench-main">
             {snapshot.histogram !== null && (
               <Timeline
@@ -114,6 +120,14 @@ export function App() {
             )}
           </main>
         </div>
+      )}
+      {adjusting !== null && (
+        <FormatDialog
+          engine={engine}
+          fileId={adjusting.fileId}
+          fileName={adjusting.fileName}
+          onClose={() => setAdjusting(null)}
+        />
       )}
       {dragging && (
         <div className="drop-overlay" aria-hidden="true">

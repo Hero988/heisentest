@@ -62,8 +62,10 @@ export function Hero({ engine, dragging }: Props) {
         <ul className="hero-points">
           <li>
             <strong>Reads the formats logs actually use.</strong> JSON lines, logfmt, nginx and
-            Apache access logs, syslog, Java/Python/Go framework layouts — detected line by line,
-            so mixed files still work. Anything unrecognized still loads as searchable text.
+            Apache access logs, syslog, CSV exports from platforms like Vercel and CloudWatch,
+            Java/Python/Go framework layouts — detected line by line, so mixed files still work.
+            Anything unrecognized still loads as searchable text — and you can teach it any
+            format, even one invented tomorrow, with a live-preview pattern editor.
           </li>
           <li>
             <strong>The timeline shows you where to look.</strong> Every event bucketed over time,
