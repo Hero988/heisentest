@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>How to analyze nginx access logs (without a log platform)</title>
+    <meta
+      name="description"
+      content="Find error spikes, slow endpoints and traffic patterns in nginx or Apache access logs: awk and goaccess recipes, plus a zero-install way to see the whole file as a timeline."
+    />
+    <link rel="canonical" href="https://heisentest.com/guides/analyze-nginx-access-logs.html" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="stylesheet" href="/guides/guide.css" />
+  </head>
+  <body>
+    <main>
+      <p class="crumb"><a href="/">heisentest</a> → guides</p>
+      <h1>How to analyze nginx access logs (without a log platform)</h1>
+      <p>
+        Something spiked at 02:14 and you have <code>access.log</code> — a few hundred thousand
+        lines of combined log format. The questions are always the same: when did errors start,
+        which endpoints, how bad, and what happened around them.
+      </p>
+
+      <h2>Quick answers with awk and sort</h2>
+      <pre># count by status code
+awk '{print $9}' access.log | sort | uniq -c | sort -rn
+
+# all 5xx lines
+awk '$9 ~ /^5/' access.log
+
+# top requested paths
+awk '{print $7}' access.log | sort | uniq -c | sort -rn | head</pre>
+      <p>
+        For standing dashboards, <a href="https://goaccess.io/">GoAccess</a> builds a full report
+        from the terminal. Both approaches share one gap: they aggregate. Seeing the
+        <em>shape</em> of an incident — errors ramping over 90 seconds, then a burst, then
+        recovery — means reading timestamps by eye.
+      </p>
+
+      <h2>Seeing the incident instead</h2>
+      <p>
+        Drop <code>access.log</code> on <a href="/">heisentest</a>: the combined log format is
+        detected automatically, 5xx become ERROR, 4xx become WARN, and the whole file turns into
+        a timeline where the spike is simply visible. Click the spike, read the exact requests.
+        Then drop the application log next to it — both files merge onto one clock, so you can
+        see what the app did in the seconds <em>before</em> the gateway started returning 502s.
+      </p>
+      <p>It runs entirely in your browser: no upload, no account, works offline.</p>
+      <div class="cta">
+        <strong>Try it:</strong> <a href="/">heisentest.com</a> — the built-in sample incident is
+        exactly this scenario: an app OOM followed three seconds later by a gateway 502 storm.
+      </div>
+
+      <h2>Honest limits</h2>
+      <p>
+        heisentest reads the file you give it; it does not tail a remote server. For live
+        dashboards over streaming traffic you want GoAccess or a hosted platform. For the
+        post-incident file in your hands, the browser is faster to answers.
+      </p>
+
+      <footer>heisentest — open huge log files in your browser. Nothing is uploaded.</footer>
+    </main>
+  </body>
+</html>

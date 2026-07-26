@@ -251,6 +251,9 @@ kbd {
   font-size: 13px;
   color: var(--muted);
 }
+.hero-guides {
+  margin-top: 6px;
+}
 
 /* ---------- loading ---------- */
 

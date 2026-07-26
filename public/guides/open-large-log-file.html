@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>How to open a log file that is too big for your editor</title>
+    <meta
+      name="description"
+      content="Notepad, VS Code and most editors choke on multi-hundred-MB log files. Here is what actually works: command-line tools, and analyzing the file locally in your browser."
+    />
+    <link rel="canonical" href="https://heisentest.com/guides/open-large-log-file.html" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="stylesheet" href="/guides/guide.css" />
+  </head>
+  <body>
+    <main>
+      <p class="crumb"><a href="/">heisentest</a> → guides</p>
+      <h1>How to open a log file that is too big for your editor</h1>
+      <p>
+        A 40 MB log opens anywhere. A 900 MB log makes Notepad freeze, makes VS Code warn you
+        about tokenization and then crawl, and is bigger than most "online log viewer" upload
+        limits — and uploading production logs to a random website is usually forbidden anyway.
+        Here are the approaches that actually work, including the ones that don't need anything
+        installed.
+      </p>
+
+      <h2>The classic answers: command-line tools</h2>
+      <p>They stream the file instead of loading it into memory, so size stops mattering:</p>
+      <pre>less +G app.log          # open at the end, scroll freely
+grep -n "ERROR" app.log  # find every error, with line numbers
+tail -n 5000 app.log     # just the recent past</pre>
+      <p>
+        On Windows, PowerShell's <code>Get-Content app.log -Tail 5000</code> does the same job.
+        <a href="https://lnav.org/">lnav</a> is the strongest terminal option — it merges and
+        colorizes formats. The trade-off with all of these: you get a pipeline, not a picture.
+        Spotting <em>when</em> things went wrong across a two-hour window from grep output is
+        slow, and correlating two files by timestamp by hand is miserable.
+      </p>
+
+      <h2>The no-install answer: analyze it in the browser, locally</h2>
+      <p>
+        <a href="/">heisentest</a> takes a different route: drop the file onto the page and it
+        is streamed and indexed <strong>inside your browser tab</strong>. Nothing is uploaded —
+        the page keeps working with wifi off — so NDA'd production logs stay on your machine.
+      </p>
+      <ul>
+        <li>The whole file becomes a timeline; error spikes are visible at a glance.</li>
+        <li>Filter millions of lines as you type; filter by level once the format is detected.</li>
+        <li>Stack traces fold into the error that threw them.</li>
+        <li>Drop a second file and both merge onto one clock for cause-and-effect reading.</li>
+      </ul>
+      <div class="cta">
+        <strong>Try it now:</strong> open <a href="/">heisentest.com</a> and drop your log — or
+        load the built-in sample incident if you just want to see how it reads a file. Free,
+        no account, Apache-2.0 <a href="https://github.com/Hero988/heisentest">open source</a>.
+      </div>
+
+      <h2>When you should still reach for something else</h2>
+      <p>
+        Honest limits: heisentest works on text logs, up to roughly the memory a browser tab can
+        hold (single-digit gigabytes in practice — the file is kept as compact bytes, but it is
+        kept). For logs that live on a remote server, pull the file down first or use
+        <code>lnav</code> over ssh. For a standing fleet of services shipping logs continuously,
+        that is what hosted platforms are for.
+      </p>
+
+      <footer>heisentest — open huge log files in your browser. Nothing is uploaded.</footer>
+    </main>
+  </body>
+</html>

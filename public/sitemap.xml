@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://heisentest.com/</loc></url>
+  <url><loc>https://heisentest.com/guides/open-large-log-file.html</loc></url>
+  <url><loc>https://heisentest.com/guides/read-json-logs.html</loc></url>
+  <url><loc>https://heisentest.com/guides/analyze-nginx-access-logs.html</loc></url>
+  <url><loc>https://heisentest.com/guides/correlate-multiple-log-files.html</loc></url>
+</urlset>

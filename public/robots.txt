@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://heisentest.com/sitemap.xml

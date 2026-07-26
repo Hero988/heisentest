@@ -77,8 +77,17 @@ export function Hero({ engine, dragging }: Props) {
         </ul>
 
         <footer className="hero-foot">
-          <a href="https://github.com/Hero988/heisentest">Source on GitHub</a> · Apache-2.0 ·
-          free — a paid tier for teams (shared investigations) is planned; the analyzer stays free.
+          <p>
+            <a href="https://github.com/Hero988/heisentest">Source on GitHub</a> · Apache-2.0 ·
+            free — a paid tier for teams (shared investigations) is planned; the analyzer stays
+            free.
+          </p>
+          <p className="hero-guides">
+            Guides: <a href="/guides/open-large-log-file.html">open a huge log file</a> ·{" "}
+            <a href="/guides/read-json-logs.html">read JSON logs</a> ·{" "}
+            <a href="/guides/analyze-nginx-access-logs.html">nginx access logs</a> ·{" "}
+            <a href="/guides/correlate-multiple-log-files.html">correlate two files</a>
+          </p>
         </footer>
       </div>
     </main>

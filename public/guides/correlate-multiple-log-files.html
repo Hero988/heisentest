@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>How to correlate two log files by timestamp</title>
+    <meta
+      name="description"
+      content="The cause is in one service's log and the symptom is in another's. How to merge log files onto one timeline: sort-merge recipes, lnav, and a zero-install browser approach."
+    />
+    <link rel="canonical" href="https://heisentest.com/guides/correlate-multiple-log-files.html" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="stylesheet" href="/guides/guide.css" />
+  </head>
+  <body>
+    <main>
+      <p class="crumb"><a href="/">heisentest</a> → guides</p>
+      <h1>How to correlate two log files by timestamp</h1>
+      <p>
+        The gateway log shows 502s from 02:14:07. The app log shows… something, somewhere around
+        then. Every real incident investigation ends up here: two (or five) files, one question —
+        <em>what happened first?</em>
+      </p>
+
+      <h2>The manual way</h2>
+      <pre>sort -m app.sorted.log gateway.sorted.log > merged.log</pre>
+      <p>
+        <code>sort -m</code> merges pre-sorted files — but only if both files start each line
+        with the same timestamp format, which an nginx file (<code>[26/Jul/2026:02:14:04
+        +0000]</code>) and a JSON app log (<code>"time":"2026-07-26T02:14:04.612Z"</code>) never
+        do. You end up writing a one-off normalization script at 2 a.m. In the terminal,
+        <a href="https://lnav.org/">lnav</a> is the mature answer — it normalizes formats and
+        merges files properly.
+      </p>
+
+      <h2>The zero-install way</h2>
+      <p>
+        Drop both files on <a href="/">heisentest</a>. Each file's format is detected on its own
+        (JSON lines, access log, syslog, plain framework logs), timestamps are normalized onto
+        one clock, and the merged view interleaves them — each file marked with its own color
+        thread. The timeline shows both files' events stacked, so "app OOM at 02:14:04, first
+        gateway 502 at 02:14:07" stops being an inference and becomes a thing you can see.
+      </p>
+      <ul>
+        <li>Filter still works across the merge — "ERROR only, both files".</li>
+        <li>Click any gateway error, read the app's lines just above it.</li>
+        <li>Local only: both files stay in your browser tab.</li>
+      </ul>
+      <div class="cta">
+        <strong>See it in 10 seconds:</strong> the sample incident on
+        <a href="/">heisentest.com</a> is a two-file merge — load it and look at the 02:14 spike.
+      </div>
+
+      <h2>Honest limits</h2>
+      <p>
+        If two machines' clocks disagreed, the merge inherits the skew — no tool can conjure the
+        true order from wrong clocks. Lines with no parseable timestamp keep their file position
+        rather than joining the merge.
+      </p>
+
+      <footer>heisentest — open huge log files in your browser. Nothing is uploaded.</footer>
+    </main>
+  </body>
+</html>

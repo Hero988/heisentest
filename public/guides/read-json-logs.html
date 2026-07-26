@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>How to read JSON logs without losing your mind</title>
+    <meta
+      name="description"
+      content="JSON-lines logs from pino, winston, zap, logrus or Docker are meant for machines. How to make them readable: jq recipes, and turning them into a filterable timeline in your browser."
+    />
+    <link rel="canonical" href="https://heisentest.com/guides/read-json-logs.html" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="stylesheet" href="/guides/guide.css" />
+  </head>
+  <body>
+    <main>
+      <p class="crumb"><a href="/">heisentest</a> → guides</p>
+      <h1>How to read JSON logs without losing your mind</h1>
+      <p>
+        Structured logging won: pino and winston in Node, zap and logrus in Go, structlog in
+        Python, Docker's json-file driver. Machines love the result. Humans get a wall of
+        <code>{"level":30,"time":1753495200123,"msg":...}</code> that is unreadable at 2 a.m.
+      </p>
+
+      <h2>The terminal way: jq</h2>
+      <pre>cat app.log | jq -r '[.time, .level, .msg] | @tsv'
+jq 'select(.level >= 50)' app.log       # errors only (pino numeric levels)
+jq 'select(.service == "checkout")' app.log</pre>
+      <p>
+        jq is superb once you know the field names — and that is the catch. Every logger spells
+        things differently: <code>time</code> vs <code>timestamp</code> vs <code>@timestamp</code>,
+        <code>level</code> as a word ("error") or a number (50), <code>msg</code> vs
+        <code>message</code>. You end up reverse-engineering the schema before you can read a line.
+      </p>
+
+      <h2>The browser way: drop the file, get a timeline</h2>
+      <p>
+        <a href="/">heisentest</a> recognizes JSON lines automatically and already knows the
+        common field spellings: pino's numeric levels, winston's string levels, the usual
+        timestamp keys, service and logger names. Each line becomes a clean row — time, level
+        badge, service, message — and the noise fields wait in a detail view until you ask.
+      </p>
+      <ul>
+        <li>Filter by level with one click once levels are detected.</li>
+        <li>The timeline shows when errors clustered, not just that they exist.</li>
+        <li>Mixed content is fine — stray <code>console.log</code> prose between JSON lines still shows up.</li>
+        <li>All of it local: the file never leaves your browser tab.</li>
+      </ul>
+      <div class="cta">
+        <strong>Try it:</strong> drop a JSON-lines file on <a href="/">heisentest.com</a> — free,
+        no account, <a href="https://github.com/Hero988/heisentest">open source</a>.
+      </div>
+
+      <h2>Honest limits</h2>
+      <p>
+        heisentest reads one JSON object per line (the JSON-lines convention). A single giant
+        JSON array, or pretty-printed multi-line objects, are not log files in this sense — for
+        those, jq remains the right tool.
+      </p>
+
+      <footer>heisentest — open huge log files in your browser. Nothing is uploaded.</footer>
+    </main>
+  </body>
+</html>
