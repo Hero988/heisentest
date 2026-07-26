@@ -11,6 +11,14 @@ Everything runs locally in your browser tab. **Your file never leaves your machi
 app works with wifi off (it's an offline-capable PWA), and you can watch the network tab
 stay empty while you analyze.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/workbench-dark.png" />
+  <img
+    src="docs/workbench-light.png"
+    alt="heisentest analyzing the sample incident: two log files merged on one timeline, the 502 error spike visible in red at 02:14, level and service facets on the left"
+  />
+</picture>
+
 ## Measured performance
 
 Numbers observed on a real machine (Chromium, mid-range Windows laptop), generated
