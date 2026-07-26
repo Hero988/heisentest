@@ -424,6 +424,42 @@ export class LogStore {
   approxBytes(): number {
     return this.blocks.reduce((a, b) => a + b.length, 0);
   }
+
+  /** Facet counts over ALL rows — cheap column scans, no materialization. */
+  facetCounts(): {
+    levels: number[];
+    services: { id: number; name: string; count: number }[];
+    files: { id: number; name: string; rows: number; firstTs: number | null; lastTs: number | null }[];
+  } {
+    const levels = new Array<number>(6).fill(0);
+    const svc = new Array<number>(this.services.length).fill(0);
+    const lv = this.level.view();
+    const sv = this.svcId.view();
+    for (let i = 0; i < lv.length; i++) {
+      levels[lv[i]!]!++;
+      const s = sv[i]!;
+      if (s >= 0) svc[s]!++;
+    }
+    return {
+      levels,
+      services: this.services
+        .map((name, id) => ({ id, name, count: svc[id]! }))
+        .filter((s) => s.count > 0)
+        .sort((a, b) => b.count - a.count),
+      files: this.files.map((f, id) => ({
+        id,
+        name: f.name,
+        rows: f.rows,
+        firstTs: f.firstTs,
+        lastTs: f.lastTs,
+      })),
+    };
+  }
+
+  /** Effective timestamp for a row (NaN when the file had none yet). */
+  effectiveTs(id: number): number {
+    return this.effTs.get(id);
+  }
 }
 
 /** Case-insensitive (ASCII) byte search of `needleLower` in `haystack`. */
