@@ -1,0 +1,137 @@
+/*
+ * heisentest design system.
+ *
+ * Files weave through the workbench as colored threads: the first file in
+ * indigo, the second in burnt amber. Red and green are reserved for verdicts
+ * only — an error level, a healthy recovery — never decoration. Bricolage
+ * Grotesque carries the voice; JetBrains Mono carries every log line.
+ */
+
+:root {
+  --paper: #fafaf7;
+  --paper-raised: #ffffff;
+  --ink: #16161a;
+  --ink-soft: #3f3f46;
+  --muted: #71717a;
+  --line: #e5e5df;
+
+  --thread-a: #4238cb;
+  --thread-a-wash: #eeedfb;
+  --thread-b: #c2610c;
+  --thread-b-wash: #faf0e4;
+
+  --verdict-fail: #c4183c;
+  --verdict-fail-wash: #fbeaee;
+  --verdict-pass: #0e7f3c;
+  --verdict-pass-wash: #e9f5ee;
+  --level-warn: #a8720d;
+  --level-warn-wash: #f5ecd8;
+  --level-info: #3d6f9e;
+  --level-debug: #8b8b96;
+
+  --term-bg: #131316;
+  --term-ink: #d6d6dd;
+
+  --focus: #4238cb;
+
+  --font-body: "Bricolage Grotesque Variable";
+  --font-mono: "JetBrains Mono Variable";
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #101014;
+    --paper-raised: #18181d;
+    --ink: #ececf1;
+    --ink-soft: #c2c2cc;
+    --muted: #8b8b96;
+    --line: #29292f;
+
+    --thread-a: #8f88ff;
+    --thread-a-wash: #211f45;
+    --thread-b: #f0954a;
+    --thread-b-wash: #33210f;
+
+    --verdict-fail: #ff5c7a;
+    --verdict-fail-wash: #391119;
+    --verdict-pass: #4ade80;
+    --verdict-pass-wash: #0d2b1a;
+    --level-warn: #e3b341;
+    --level-warn-wash: #33301e;
+    --level-info: #7aa5cc;
+    --level-debug: #66727d;
+
+    --term-bg: #0b0b0e;
+    --term-ink: #cfcfd8;
+
+    --focus: #8f88ff;
+  }
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--thread-a);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+code,
+pre,
+kbd {
+  font-family: var(--font-mono), ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+::selection {
+  background: var(--thread-a);
+  color: var(--paper);
+}
+
+.shell {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 0 24px;
+}

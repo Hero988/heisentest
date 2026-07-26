@@ -1,0 +1,45 @@
+# Private working material — never committed, never public
+.private/
+
+# Secrets and environment
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials/
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Deploy metadata
+.vercel/
+
+# Test artifacts
+test-results/
+playwright-report/
+tmp/
+
+# Logs — except the test fixtures, which for this project ARE log files
+*.log
+npm-debug.log*
+logs/
+!test/fixtures/**/*.log
+
+# Editor / OS cruft
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
